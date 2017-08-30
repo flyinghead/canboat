@@ -51,8 +51,6 @@ static int passthru = 0;
 static long timeout = 0;
 static bool isFile;
 
-static int msgId = 100;
-
 enum ReadyDescriptor
 {
   FD1_Ready = 0x0001,
@@ -63,12 +61,10 @@ static enum ReadyDescriptor isready(int fd1, int fd2);
 static int readIn(unsigned char * msg, size_t len);
 static void parseAndWriteIn(int handle, const unsigned char * cmd);
 static void writeRaw(int handle, const unsigned char * cmd, const size_t len);
-static void writeMessage(int handle, unsigned char command, unsigned char * cmd, size_t len, unsigned int src);
-static void readNGT1Byte(unsigned char c);
+static void writeMessage(int handle, unsigned char * cmd, size_t len, unsigned int src);
 static int readNGT1(int handle);
 static void messageReceived(const unsigned char * msg, size_t msgLen);
 static void n2kMessageReceived(const unsigned char * msg, size_t msgLen);
-static void ngtMessageReceived(const unsigned char * msg, size_t msgLen);
 
 int main(int argc, char ** argv)
 {
@@ -364,7 +360,7 @@ static void writeRaw(int handle, const unsigned char * cmd, const size_t len)
 }
 
 /*
- * Wrap the PGN or NGT message and send to NGT
+ * Wrap the PGN message and send to can4linux device
  */
 static void writeMessage(int handle, unsigned char * cmd, size_t len, unsigned int src)
 {
@@ -471,77 +467,6 @@ static int readIn(unsigned char * msg, size_t msgLen)
   return 0;
 }
 
-/**
- * Handle a byte coming in from the NGT1.
- *
- */
-
-static void readNGT1Byte(unsigned char c)
-{
-  static enum MSG_State state = MSG_START;
-  static bool startEscape = false;
-  static bool noEscape = false;
-  static unsigned char buf[500];
-  static unsigned char * head = buf;
-
-  logDebug("received byte %02x state=%d offset=%d\n", c, state, head - buf);
-
-  if (state == MSG_START)
-  {
-    if ((c == ESC) && isFile)
-    {
-      noEscape = true;
-    }
-  }
-
-  if (state == MSG_ESCAPE)
-  {
-    if (c == ETX)
-    {
-      messageReceived(buf, head - buf);
-      head = buf;
-      state = MSG_START;
-    }
-    else if (c == STX)
-    {
-      head = buf;
-      state = MSG_MESSAGE;
-    }
-    else if ((c == DLE) || ((c == ESC) && isFile) || noEscape)
-    {
-      *head++ = c;
-      state = MSG_MESSAGE;
-    }
-    else
-    {
-      logError("DLE followed by unexpected char %02X, ignore message\n", c);
-      state = MSG_START;
-    }
-  }
-  else if (state == MSG_MESSAGE)
-  {
-    if (c == DLE)
-    {
-      state = MSG_ESCAPE;
-    }
-    else if (isFile && (c == ESC) && !noEscape)
-    {
-      state = MSG_ESCAPE;
-    }
-    else
-    {
-      *head++ = c;
-    }
-  }
-  else
-  {
-    if (c == DLE)
-    {
-      state = MSG_ESCAPE;
-    }
-  }
-}
-
 static int readNGT1(int handle)
 {
   size_t i;
@@ -554,24 +479,26 @@ static int readNGT1(int handle)
 
   if (r <= 0) /* No char read, abort message read */
   {
-    logAbort("Unable to read from NGT1 device\n");
+    logAbort("Unable to read from can4linux device\n");
   }
 
-  logDebug("Read %d bytes from device\n", (int) r);
+  logDebug("Read %d messages from device\n", (int) r);
   if (debug)
   {
-    fprintf(stderr, "flags=%08X cob=%08X ", buf[0].flags, buf[0].cob);
-    fprintf(stderr, "id=%08X length=%d (max=%d)\n", buf[0].id, buf[0].length, CAN_MSG_LENGTH);
+    for (int j = 0; j < r; j++) {
+      fprintf(stderr, "msg %d: flags=%08X cob=%08X ", j, buf[j].flags, buf[j].cob);
+      fprintf(stderr, "id=%08X length=%d\n", buf[j].id, buf[j].length);
 
-    fprintf(stderr, "data: ");
-    for (i = 0; i < buf[0].length; i++)
-    {
-      c = buf[0].data[i];
-      fprintf(stderr, " %02X", c);
+      fprintf(stderr, "data: ");
+      for (i = 0; i < buf[j].length; i++)
+      {
+        c = buf[j].data[i];
+        fprintf(stderr, " %02X", c);
+      }
+      fprintf(stderr, "\n");
     }
-    fprintf(stderr, "\n");
   }
-  for (i = 0; i * sizeof(canmsg_t) < r; i++) {
+  for (i = 0; i < r; i++) {
     unsigned char cbuf[4 + buf[i].length];
     memcpy(cbuf, &buf[i].id, 4);
     memcpy(cbuf + 4, buf[i].data, buf[i].length);
@@ -583,67 +510,15 @@ static int readNGT1(int handle)
 
 static void messageReceived(const unsigned char * msg, size_t msgLen)
 {
-  unsigned char command;
-  unsigned char checksum = 0;
-  unsigned char * payload;
-  unsigned char payloadLen;
-  size_t i;
-
   if (msgLen < 3)
   {
     logError("Ignore short command len = %zu\n", msgLen);
     return;
   }
 
-  for (i = 0; i < msgLen; i++)
-  {
-    checksum += msg[i];
-  }
-  if (checksum)
-  {
-//    logError("Ignoring message with invalid checksum\n");
-//    return;
-  }
+  logDebug("message message len = %u\n", msgLen);
 
-  command = msg[0];
-  payloadLen = msg[1];
-
-  logDebug("message command = %02x len = %u\n", command, payloadLen);
-
-//  if (command == N2K_MSG_RECEIVED)
-//  {
-    n2kMessageReceived(msg, msgLen);
-//  }
-//  else if (command == NGT_MSG_RECEIVED)
-//  {
-//    ngtMessageReceived(msg + 2, payloadLen);
-//  }
-}
-
-static void ngtMessageReceived(const unsigned char * msg, size_t msgLen)
-{
-  size_t i;
-  char line[1000];
-  char * p;
-  char dateStr[DATE_LENGTH];
-
-  if (msgLen < 12)
-  {
-    logError("Ignore short msg len = %zu\n", msgLen);
-    return;
-  }
-
-  sprintf(line, "%s,%u,%u,%u,%u,%u", now(dateStr), 0, 0x40000 + msg[0], 0, 0, (unsigned int) msgLen - 1);
-  p = line + strlen(line);
-  for (i = 1; i < msgLen && p < line + sizeof(line) - 5; i++)
-  {
-    sprintf(p, ",%02x", msg[i]);
-    p += 3;
-  }
-  *p++ = 0;
-
-  puts(line);
-  fflush(stdout);
+  n2kMessageReceived(msg, msgLen);
 }
 
 static void n2kMessageReceived(const unsigned char * msg, size_t msgLen)
