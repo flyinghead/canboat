@@ -27,7 +27,7 @@ ROOT_MOD=0644
 
 all:	bin
 	for dir in $(SUBDIRS); do $(MAKE) -C $$dir; done
-	$(MAKE) -C analyzer json
+#	$(MAKE) -C analyzer json
 
 bin:	rel/$(PLATFORM)
 
