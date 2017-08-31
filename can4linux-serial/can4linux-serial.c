@@ -473,9 +473,9 @@ static int readNGT1(int handle)
   ssize_t r;
   bool printed = 0;
   unsigned char c;
-  canmsg_t buf[100];
+  canmsg_t buf[10];
 
-  r = read(handle, buf, sizeof(buf));
+  r = read(handle, buf, 1);
 
   if (r <= 0) /* No char read, abort message read */
   {
