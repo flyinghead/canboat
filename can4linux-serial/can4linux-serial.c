@@ -383,7 +383,7 @@ static void writeMessage(int handle, unsigned char * cmd, size_t len, unsigned i
   tx[0].id = ((unsigned int)cmd[0] << 26) 	// Priority
     + ((unsigned int)cmd[3] << 24) + ((unsigned int)cmd[2] << 16) + ((unsigned int)cmd[1] << 8)		// PGN
     + src;
-  if (cmd[3] == 0 && cmd[2] < 240)
+  if (cmd[1] == 0 && cmd[2] < 240)
     // PDU1 add destination address
     tx[0].id |= cmd[4] << 8;
 
