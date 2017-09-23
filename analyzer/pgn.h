@@ -2039,7 +2039,7 @@ Pgn pgnList[] =
   , { "Battery Instance", BYTES(1), 1, false, 0, "" }
   , { "Operating State", 4, RES_LOOKUP, false, ",0=Not charging,1=Bulk,2=Absorption,3=Overcharge,4=Equalise,5=Float,6=No Float,7=Constant VI,8=Disabled,9=Fault", "" }
   , { "Charge Mode", 4, RES_LOOKUP, false, ",0=Standalone mode,1=Primary mode,2=Secondary mode,3=Echo mode", "" }
-  , { "Operating State", 2, RES_LOOKUP, false, ",0=Off,1=On", "" }
+  , { "Charger Enabled", 2, RES_LOOKUP, false, ",0=Off,1=On", "" }
   , { "Equalization Pending", 2, RES_LOOKUP, false, ",0=Off,1=On", "" }
   , { "Reserved", 4, RES_BINARY, false, 0, "" }
   , { "Equalization Time Remaining", BYTES(2), 1, false, 0, "" }
